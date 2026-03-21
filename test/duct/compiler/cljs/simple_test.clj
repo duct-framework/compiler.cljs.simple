@@ -17,3 +17,25 @@
    (finally
      (doseq [f (reverse (file-seq (io/file "target/cljs")))]
        (.delete f)))))
+
+(deftest repl-test
+  (try
+    (let [sys (ig/init {::simple/compiler-env {}
+                        ::simple/build
+                        {:compiler-env (ig/ref ::simple/compiler-env)
+                         :output-dir "target/cljs/js"
+                         :output-to "target/cljs/js/main.js"
+                         :optimizations :none
+                         :main 'duct.compiler.cljs.client-test}
+                        ::simple/repl-server
+                        {:build        (ig/ref ::simple/build)
+                         :compiler-env (ig/ref ::simple/compiler-env)}})
+          ->js (::simple/repl-server sys)]
+      (is (= "((1) + (1));\n" (->js '(+ 1 1))))
+      (is (= "goog.require('clojure.string');\n"
+             (->js '(require '[clojure.string :as s]))))
+      (is (= "clojure.string.trim.call(null,\" foo \");\n"
+             (->js '(s/trim " foo ")))))
+   (finally
+     (doseq [f (reverse (file-seq (io/file "target/cljs")))]
+       (.delete f)))))

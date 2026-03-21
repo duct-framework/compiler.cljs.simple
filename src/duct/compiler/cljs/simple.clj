@@ -11,3 +11,7 @@
 (defmethod ig/init-key ::build
   [_ {:keys [source compiler-env] :as opts}]
   (build/build source (dissoc opts :source :compiler-env) compiler-env))
+
+(defmethod ig/init-key ::repl-server [_ {:keys [compiler-env]}]
+  (fn [form]
+    (ana/with-state compiler-env (closure/compile form {}))))
