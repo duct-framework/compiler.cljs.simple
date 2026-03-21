@@ -1,17 +1,16 @@
 (ns duct.compiler.cljs.simple
   (:require [cljs.analyzer.api :as ana]
             [cljs.build.api :as build]
-            [cljs.closure :as closure]
+            [cljs.closure :as clos]
             [integrant.core :as ig]))
 
-(defmethod ig/init-key ::compiler-env [_ opts]
-  (ana/empty-state
-   (-> opts (dissoc :foreign-libs) (closure/add-externs-sources))))
+(defn- compiler-env [opts]
+  (ana/empty-state (-> opts (dissoc :foreign-libs) (clos/add-externs-sources))))
 
-(defmethod ig/init-key ::build
-  [_ {:keys [source compiler-env] :as opts}]
-  (build/build source (dissoc opts :source :compiler-env) compiler-env))
+(defmethod ig/init-key ::build [_ {:keys [source] :as opts}]
+  (let [env (compiler-env {})]
+    (build/build source (dissoc opts :source :compiler-env) env)
+    {:compiler-env env}))
 
-(defmethod ig/init-key ::repl-server [_ {:keys [compiler-env]}]
-  (fn [form]
-    (ana/with-state compiler-env (closure/compile form {}))))
+(defmethod ig/init-key ::repl-server [_ {{:keys [compiler-env]} :build}]
+  (fn [form] (ana/with-state compiler-env (clos/compile form {}))))
