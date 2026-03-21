@@ -1,5 +1,7 @@
 (ns duct.compiler.cljs.simple-test
-  (:require [clojure.java.io :as io]
+  (:require [clj-http.client :as http]
+            [clojure.core.async :refer [>!!]]
+            [clojure.java.io :as io]
             [clojure.test :refer [deftest is]]
             [duct.compiler.cljs.simple :as simple]
             [integrant.core :as ig]))
@@ -25,12 +27,22 @@
                          :main 'duct.compiler.cljs.client-test}
                         ::simple/repl-server
                         {:build (ig/ref ::simple/build)}})
-          ->js (::simple/repl-server sys)]
-      (is (= "((1) + (1));\n" (->js '(+ 1 1))))
-      (is (= "goog.require('clojure.string');\n"
-             (->js '(require '[clojure.string :as s]))))
-      (is (= "clojure.string.trim.call(null,\" foo \");\n"
-             (->js '(s/trim " foo ")))))
+          in  (-> sys ::simple/repl-server :in)]
+      (try
+        (>!! in '(+ 1 1))
+        (is (= {:repl "duct.compiler.cljs.simple/repl-server"
+                :form "((1) + (1));\n"}
+               (:body (http/post "http://localhost:9000" {:as :json}))))
+        (>!! in '(require '[clojure.string :as s]))
+        (is (= {:repl "duct.compiler.cljs.simple/repl-server"
+                :form "goog.require('clojure.string');\n"}
+               (:body (http/post "http://localhost:9000" {:as :json}))))
+        (>!! in '(s/trim " foo "))
+        (is (= {:repl "duct.compiler.cljs.simple/repl-server"
+                :form "clojure.string.trim.call(null,\" foo \");\n"}
+               (:body (http/post "http://localhost:9000" {:as :json}))))
+        (finally
+          (ig/halt! sys))))
    (finally
      (doseq [f (reverse (file-seq (io/file "target/cljs")))]
        (.delete f)))))
