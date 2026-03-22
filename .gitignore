@@ -12,3 +12,7 @@ pom.xml.asc
 /.cpcache
 /.clj-kondo
 /.shadow-cljs
+/test-project/target
+/test-project/.cpcache
+/test-project/.rebel_readline_history
+/test-project/logs

@@ -1,0 +1,18 @@
+{:system
+ {:duct.module/logging {}
+  :duct.module/web
+  {:features #{:site}}
+
+  :duct.handler/file
+  {:paths {"/js" {:root "target/cljs/js"}}}
+
+  :duct.compiler.cljs.simple/build
+  {:asset-path "/js"
+   :browser-repl true
+   :output-dir "target/cljs/js"
+   :output-to "target/cljs/js/client.js"
+   :optimizations :none
+   :main test-project.client}
+
+  :duct.compiler.cljs.simple/repl-server
+  {:build #ig/ref :duct.compiler.cljs.simple/build}}}
