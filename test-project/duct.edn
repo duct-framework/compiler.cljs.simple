@@ -8,10 +8,10 @@
 
   :duct.compiler.cljs.simple/build
   {:asset-path "/js"
-   :browser-repl true
    :output-dir "target/cljs/js"
    :output-to "target/cljs/js/client.js"
    :optimizations :none
+   :preloads [duct.client.repl.simple]
    :main test-project.client}
 
   :duct.compiler.cljs.simple/repl-server
