@@ -1,10 +1,11 @@
 (ns duct.compiler.cljs.simple-test
-  (:require [clj-http.client :as http]
-            [clojure.core.async :refer [>!!]]
+  (:require [cheshire.core :as json]
+            [clojure.core.async :refer [>!! <!!] :as a]
             [clojure.java.io :as io]
             [clojure.test :refer [deftest is]]
             [duct.compiler.cljs.simple :as simple]
-            [integrant.core :as ig]))
+            [integrant.core :as ig]
+            [java-http-clj.websocket :as ws]))
 
 (deftest build-test
   (try
@@ -27,21 +28,26 @@
                          :main 'duct.compiler.cljs.client-test}
                         ::simple/repl-server
                         {:build (ig/ref ::simple/build)}})
-          in  (-> sys ::simple/repl-server :in)]
+          in    (-> sys ::simple/repl-server :in)
+          wsout (a/chan 128)
+          ws    (ws/build-websocket
+                 "ws://localhost:9000/"
+                 {:on-text (fn [_ text _] (>!! wsout text))})]
       (try
         (>!! in '(+ 1 1))
-        (is (= {:repl "duct.compiler.cljs.simple/repl-server"
-                :form "((1) + (1));\n"}
-               (:body (http/post "http://localhost:9000" {:as :json}))))
+        (is (= {"op"   "eval"
+                "form" "((1) + (1));\n"}
+               (json/parse-string (<!! wsout))))
         (>!! in '(require '[clojure.string :as s]))
-        (is (= {:repl "duct.compiler.cljs.simple/repl-server"
-                :form "goog.require('clojure.string');\n"}
-               (:body (http/post "http://localhost:9000" {:as :json}))))
+        (is (= {"op"   "eval"
+                "form" "goog.require('clojure.string');\n"}
+               (json/parse-string (<!! wsout))))
         (>!! in '(s/trim " foo "))
-        (is (= {:repl "duct.compiler.cljs.simple/repl-server"
-                :form "clojure.string.trim.call(null,\" foo \");\n"}
-               (:body (http/post "http://localhost:9000" {:as :json}))))
+        (is (= {"op"   "eval"
+                "form" "clojure.string.trim.call(null,\" foo \");\n"}
+               (json/parse-string (<!! wsout))))
         (finally
+          (ws/close ws)
           (ig/halt! sys))))
    (finally
      (doseq [f (reverse (file-seq (io/file "target/cljs")))]

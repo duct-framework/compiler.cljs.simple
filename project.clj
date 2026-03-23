@@ -7,7 +7,7 @@
                  [cheshire "5.13.0"]
                  [integrant "1.0.1"]
                  [org.duct-framework/server.http.jetty "0.3.4"]
-                 [ring/ring-core "1.15.3"]
-                 [ring/ring-json "0.5.1"]]
+                 [org.ring-clojure/ring-websocket-async "0.2.0"]
+                 [org.ring-clojure/ring-websocket-middleware "0.2.1"]]
   :profiles
-  {:dev {:dependencies [[clj-http "3.13.1"]]}})
+  {:dev {:dependencies [[java-http-clj "0.4.3"]]}})

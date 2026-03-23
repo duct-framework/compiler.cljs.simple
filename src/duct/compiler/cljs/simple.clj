@@ -1,12 +1,13 @@
 (ns duct.compiler.cljs.simple
-  (:require [cljs.analyzer.api :as ana]
+  (:require [cheshire.core :as json]
+            [cljs.analyzer.api :as ana]
             [cljs.build.api :as build]
             [cljs.closure :as clos]
-            [clojure.core.async :as a :refer [<!]]
+            [clojure.core.async :as a :refer [<! >!]]
             [duct.server.http.jetty]
             [integrant.core :as ig]
-            [ring.middleware.json :refer [wrap-json-response]]
-            [ring.util.response :as res]))
+            [ring.websocket.async :as wsa]
+            [ring.websocket.keepalive :refer [wrap-websocket-keepalive]]))
 
 (defn- compiler-env [opts]
   (ana/empty-state (-> opts (dissoc :foreign-libs) (clos/add-externs-sources))))
@@ -16,17 +17,21 @@
     (build/build source (dissoc opts :source) env)
     {:compiler-env env}))
 
-(defn- build-repl-handler [id env in]
-  (wrap-json-response
-   (fn [_request respond _raise]
-     (a/go (let [js (build/compile env {} (<! in))]
-             (respond (res/response {:repl id, :form js})))))))
+(defn- build-repl-handler [env in]
+  (wrap-websocket-keepalive
+   (fn [_request]
+     (wsa/go-websocket [_ out]
+       (loop []
+         (when-some [form (<! in)]
+           (let [js (build/compile env {} form)]
+             (>! out (json/generate-string {:op :eval :form js}))
+             (recur))))))))
 
 (defmethod ig/init-key ::repl-server
-  [key {{:keys [compiler-env]} :build, :keys [port] :or {port 9000}}]
+  [_ {{:keys [compiler-env]} :build, :keys [port] :or {port 9000}}]
   (let [in      (a/chan 128)
-        handler (build-repl-handler key compiler-env in)
-        options {:port port, :handler handler, :async? true}]
+        handler (build-repl-handler compiler-env in)
+        options {:port port, :handler handler}]
     {:in     in
      :server (ig/init-key :duct.server.http/jetty options)}))
 
