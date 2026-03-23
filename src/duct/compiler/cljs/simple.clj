@@ -19,7 +19,7 @@
 (defn- build-repl-handler [id env in]
   (wrap-json-response
    (fn [_request respond _raise]
-     (a/go (let [js (ana/with-state env (clos/compile (<! in) {}))]
+     (a/go (let [js (build/compile env {} (<! in))]
              (respond (res/response {:repl id, :form js})))))))
 
 (defmethod ig/init-key ::repl-server
