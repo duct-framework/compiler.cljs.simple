@@ -23,7 +23,7 @@
      (wsa/go-websocket [_ out]
        (loop []
          (when-some [form (<! in)]
-           (let [js (build/compile env {} form)]
+           (let [js (build/compile env {} `((fn [] ~form)))]
              (>! out (json/generate-string {:op :eval :form js}))
              (recur))))))))
 

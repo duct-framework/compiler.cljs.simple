@@ -8,9 +8,9 @@
   ([url]
    (a/go (let [ws (<! (ws/connect url {:format fmt/json}))]
            (loop []
-             (when-some [msg (<! (:in ws))]
-               (prn msg)
+             (when-some [{:strs [form]} (<! (:in ws))]
+               (js/eval form)
                (recur)))))))
 
-(js/console.log "REPL connecting")
+(js/console.log "REPL connecting...")
 (connect)
