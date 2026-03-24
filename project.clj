@@ -5,6 +5,7 @@
                  [org.clojure/clojurescript "1.12.134"]
                  [org.clojure/core.async "1.9.865"]
                  [cheshire "5.13.0"]
+                 [haslett "0.2.0"]
                  [integrant "1.0.1"]
                  [org.duct-framework/server.http.jetty "0.3.4"]
                  [org.ring-clojure/ring-websocket-async "0.2.0"]
