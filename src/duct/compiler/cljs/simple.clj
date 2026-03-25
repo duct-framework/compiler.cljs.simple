@@ -29,7 +29,7 @@
            (loop []
              (when-some [form (<! sess-in)]
                (let [js (build/compile env {} `((fn [] ~form)))]
-                 (>! ws-out (json/generate-string {:op :eval :form js}))
+                 (>! ws-out (json/generate-string {:eval js}))
                  (when-some [result (<! ws-in)]
                    (>! sess-out (json/parse-string result true))
                    (recur)))))

@@ -5,7 +5,7 @@
 
 (defn- handle-messages [{:keys [in out]}]
   (a/go-loop []
-    (when-some [{:strs [form]} (<! in)]
+    (when-some [{form "eval"} (<! in)]
       (let [result (js/eval form)]
         (>! out {:value (pr-str result)})
         (recur)))))
