@@ -3,14 +3,20 @@
             [haslett.client :as ws]
             [haslett.format :as fmt]))
 
+(defn- handle-messages [{:keys [in out]}]
+  (a/go-loop []
+    (when-some [{:strs [form]} (<! in)]
+      (let [result (js/eval form)]
+        (>! out {:value (pr-str result)})
+        (recur)))))
+
 (defn connect
   ([] (connect "ws://localhost:9000"))
   ([url]
-   (a/go (let [{:keys [in out]} (<! (ws/connect url {:format fmt/json}))]
-           (js/console.log "REPL connected.")
-           (loop []
-             (when-some [{:strs [form]} (<! in)]
-               (let [result (js/eval form)]
-                 (>! out {:value (pr-str result)})
-                 (recur)))))
-         (js/console.log "REPL closed."))))
+   (a/go-loop []
+     (let [ws (<! (ws/connect url {:format fmt/json}))]
+       (js/console.log "REPL connected.")
+       (<! (handle-messages ws))
+       (js/console.log "REPL closed. Retrying...")
+       (<! (a/timeout 1000))
+       (recur)))))
