@@ -17,31 +17,44 @@
     (build/build source (dissoc opts :source) env)
     {:compiler-env env}))
 
-(defn- build-repl-handler [env in out]
+(defn- build-repl-handler [env sessions]
   (wrap-websocket-keepalive
    (fn [_request]
      (wsa/go-websocket [ws-in ws-out]
-       (loop []
-         (when-some [form (<! in)]
-           (let [js (build/compile env {} `((fn [] ~form)))]
-             (>! ws-out (json/generate-string {:op :eval :form js}))
-             (when-some [result (<! ws-in)]
-               (>! out (json/parse-string result true))
-               (recur)))))))))
+       (let [session-id (random-uuid)
+             sess-in    (a/chan 128)
+             sess-out   (a/chan 128)]
+         (swap! sessions assoc session-id {:in sess-in :out sess-out})
+         (try 
+           (loop []
+             (when-some [form (<! sess-in)]
+               (let [js (build/compile env {} `((fn [] ~form)))]
+                 (>! ws-out (json/generate-string {:op :eval :form js}))
+                 (when-some [result (<! ws-in)]
+                   (>! sess-out (json/parse-string result true))
+                   (recur)))))
+           (finally
+             (swap! sessions dissoc session-id))))))))
 
 (defmethod ig/init-key ::repl-server
   [_ {{:keys [compiler-env]} :build, :keys [port] :or {port 9000}}]
-  (let [in      (a/chan 128)
-        out     (a/chan 128)
-        handler (build-repl-handler compiler-env in out)
-        options {:port port, :handler handler}]
-    {:in     in
-     :out    out
-     :server (ig/init-key :duct.server.http/jetty options)}))
+  (let [sessions (atom {})
+        handler  (build-repl-handler compiler-env sessions)
+        options  {:port port, :handler handler}]
+    {:sessions sessions
+     :server   (ig/init-key :duct.server.http/jetty options)}))
 
 (defmethod ig/halt-key! ::repl-server [_ {:keys [server]}]
   (ig/halt-key! :duct.server.http/jetty server))
 
-(defn eval-in-client [server form]
-  (>!! (:in server) form)
-  (println (:value (<!! (:out server)))))
+(defn server-sessions [server]
+  (-> server :sessions deref keys))
+
+(defn eval-in-client
+  ([server form]
+   (let [session-id (first (server-sessions server))]
+     (eval-in-client server session-id form)))
+  ([server session-id form]
+   (let [{:keys [in out]} (-> server :sessions deref (get session-id))]
+     (>!! in form)
+     (println (:value (<!! out))))))
