@@ -3,7 +3,7 @@
             [cljs.analyzer.api :as ana]
             [cljs.build.api :as build]
             [cljs.closure :as clos]
-            [clojure.core.async :as a :refer [<! >!]]
+            [clojure.core.async :as a :refer [<! >! >!! <!!]]
             [duct.server.http.jetty]
             [integrant.core :as ig]
             [ring.websocket.async :as wsa]
@@ -24,9 +24,9 @@
        (loop []
          (when-some [form (<! in)]
            (let [js (build/compile env {} `((fn [] ~form)))]
-             (>! ws-out (json/generate-string {:op :eval :form #p js}))
+             (>! ws-out (json/generate-string {:op :eval :form js}))
              (when-some [result (<! ws-in)]
-               (>! out (json/parse-string #p result))
+               (>! out (json/parse-string result true))
                (recur)))))))))
 
 (defmethod ig/init-key ::repl-server
@@ -41,3 +41,7 @@
 
 (defmethod ig/halt-key! ::repl-server [_ {:keys [server]}]
   (ig/halt-key! :duct.server.http/jetty server))
+
+(defn eval-in-client [server form]
+  (>!! (:in server) form)
+  (println (:value (<!! (:out server)))))
