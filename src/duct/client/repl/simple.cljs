@@ -7,12 +7,10 @@
   ([] (connect "ws://localhost:9000"))
   ([url]
    (a/go (let [{:keys [in out]} (<! (ws/connect url {:format fmt/json}))]
+           (js/console.log "REPL connected.")
            (loop []
              (when-some [{:strs [form]} (<! in)]
                (let [result (js/eval form)]
                  (>! out {:value (pr-str result)})
                  (recur)))))
-         (js/console.log "Websocket closed"))))
-
-(js/console.log "REPL connecting...")
-(connect)
+         (js/console.log "REPL closed."))))

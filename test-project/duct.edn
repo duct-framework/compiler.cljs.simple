@@ -11,7 +11,7 @@
    :output-dir "target/cljs/js"
    :output-to "target/cljs/js/client.js"
    :optimizations :none
-   :preloads [duct.client.repl.simple]
+   :preloads [duct.client.repl.simple.preload]
    :main test-project.client}
 
   :duct.compiler.cljs.simple/repl-server
