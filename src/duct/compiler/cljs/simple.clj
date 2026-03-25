@@ -17,22 +17,26 @@
     (build/build source (dissoc opts :source) env)
     {:compiler-env env}))
 
-(defn- build-repl-handler [env in]
+(defn- build-repl-handler [env in out]
   (wrap-websocket-keepalive
    (fn [_request]
-     (wsa/go-websocket [_ out]
+     (wsa/go-websocket [ws-in ws-out]
        (loop []
          (when-some [form (<! in)]
            (let [js (build/compile env {} `((fn [] ~form)))]
-             (>! out (json/generate-string {:op :eval :form js}))
-             (recur))))))))
+             (>! ws-out (json/generate-string {:op :eval :form #p js}))
+             (when-some [result (<! ws-in)]
+               (>! out (json/parse-string #p result))
+               (recur)))))))))
 
 (defmethod ig/init-key ::repl-server
   [_ {{:keys [compiler-env]} :build, :keys [port] :or {port 9000}}]
   (let [in      (a/chan 128)
-        handler (build-repl-handler compiler-env in)
+        out     (a/chan 128)
+        handler (build-repl-handler compiler-env in out)
         options {:port port, :handler handler}]
     {:in     in
+     :out    out
      :server (ig/init-key :duct.server.http/jetty options)}))
 
 (defmethod ig/halt-key! ::repl-server [_ {:keys [server]}]
