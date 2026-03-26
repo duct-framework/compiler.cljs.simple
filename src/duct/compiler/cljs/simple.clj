@@ -17,6 +17,15 @@
     (build/build source (dissoc opts :source) env)
     {:compiler-env env}))
 
+(defn- run-session [env sess-in sess-out ws-in ws-out]
+  (a/go-loop []
+    (when-some [form (<! sess-in)]
+      (let [js (build/compile env {} `((fn [] ~form)))]
+        (>! ws-out (json/generate-string {:eval js}))
+        (when-some [result (<! ws-in)]
+          (>! sess-out (json/parse-string result true))
+          (recur))))))
+
 (defn- build-repl-handler [env sessions]
   (wrap-websocket-keepalive
    (fn [_request]
@@ -25,14 +34,8 @@
              sess-in    (a/chan 128)
              sess-out   (a/chan 128)]
          (swap! sessions assoc session-id {:in sess-in :out sess-out})
-         (try 
-           (loop []
-             (when-some [form (<! sess-in)]
-               (let [js (build/compile env {} `((fn [] ~form)))]
-                 (>! ws-out (json/generate-string {:eval js}))
-                 (when-some [result (<! ws-in)]
-                   (>! sess-out (json/parse-string result true))
-                   (recur)))))
+         (try
+           (<! (run-session env sess-in sess-out ws-in ws-out))
            (finally
              (swap! sessions dissoc session-id))))))))
 
