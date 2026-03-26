@@ -17,33 +17,31 @@
     (build/build source (dissoc opts :source) env)
     {:compiler-env env}))
 
-(defn- new-session []
-  {:id (random-uuid), :in (a/chan 128), :out (a/chan 128)})
+(defn- pipe [from to]
+  (a/go-loop []
+    (when-some [v (<! from)]
+      (when (>! to v) (recur)))))
+
+(defn- cljs->js [env form]
+  (let [js (build/compile env {} `((fn [] ~form)))]
+    (json/generate-string {:eval js})))
+
+(defn- new-session [env]
+  {:id  (random-uuid)
+   :in  (a/chan 128 (map #(cljs->js env %)))
+   :out (a/chan 128 (map #(json/parse-string % true)))})
 
 (defn- close-session! [{:keys [in out]}]
   (a/close! in) (a/close! out))
-
-(defn- read-loop [env sess-in ws-out]
-  (a/go-loop []
-    (when-some [form (<! sess-in)]
-      (let [js (build/compile env {} `((fn [] ~form)))]
-        (>! ws-out (json/generate-string {:eval js}))
-        (recur)))))
-
-(defn- print-loop [ws-in sess-out]
-  (a/go-loop []
-    (when-some [result (<! ws-in)]
-      (>! sess-out (json/parse-string result true))
-      (recur))))
 
 (defn- build-repl-handler [env sessions]
   (wrap-websocket-keepalive
    (fn [_request]
      (wsa/go-websocket [ws-in ws-out]
-       (let [{:keys [id in out] :as sess} (new-session)]
+       (let [{:keys [id in out] :as sess} (new-session env)]
          (swap! sessions assoc id sess)
          (try
-           (a/alts! [(read-loop env in ws-out) (print-loop ws-in out)])
+           (a/alts! [(pipe in ws-out) (pipe ws-in out)])
            (finally
              (close-session! sess)
              (swap! sessions dissoc id))))))))
