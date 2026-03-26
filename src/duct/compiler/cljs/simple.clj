@@ -17,27 +17,36 @@
     (build/build source (dissoc opts :source) env)
     {:compiler-env env}))
 
-(defn- run-session [env sess-in sess-out ws-in ws-out]
+(defn- new-session []
+  {:id (random-uuid), :in (a/chan 128), :out (a/chan 128)})
+
+(defn- close-session! [{:keys [in out]}]
+  (a/close! in) (a/close! out))
+
+(defn- read-loop [env sess-in ws-out]
   (a/go-loop []
     (when-some [form (<! sess-in)]
       (let [js (build/compile env {} `((fn [] ~form)))]
         (>! ws-out (json/generate-string {:eval js}))
-        (when-some [result (<! ws-in)]
-          (>! sess-out (json/parse-string result true))
-          (recur))))))
+        (recur)))))
+
+(defn- print-loop [ws-in sess-out]
+  (a/go-loop []
+    (when-some [result (<! ws-in)]
+      (>! sess-out (json/parse-string result true))
+      (recur))))
 
 (defn- build-repl-handler [env sessions]
   (wrap-websocket-keepalive
    (fn [_request]
      (wsa/go-websocket [ws-in ws-out]
-       (let [session-id (random-uuid)
-             sess-in    (a/chan 128)
-             sess-out   (a/chan 128)]
-         (swap! sessions assoc session-id {:in sess-in :out sess-out})
+       (let [{:keys [id in out] :as sess} (new-session)]
+         (swap! sessions assoc id sess)
          (try
-           (<! (run-session env sess-in sess-out ws-in ws-out))
+           (a/alts! [(read-loop env in ws-out) (print-loop ws-in out)])
            (finally
-             (swap! sessions dissoc session-id))))))))
+             (close-session! sess)
+             (swap! sessions dissoc id))))))))
 
 (defmethod ig/init-key ::repl-server
   [_ {{:keys [compiler-env]} :build, :keys [port] :or {port 9000}}]
