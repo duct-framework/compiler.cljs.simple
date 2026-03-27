@@ -46,8 +46,13 @@
              (close-session! sess)
              (swap! sessions dissoc id))))))))
 
+(defn- compile-main [env]
+  (let [main (-> @env :options :main)]
+    (build/compile env {} (list 'require (list 'quote main)))))
+
 (defmethod ig/init-key ::repl-server
   [_ {{:keys [compiler-env]} :build, :keys [port] :or {port 9000}}]
+  (compile-main compiler-env) 
   (let [sessions (atom {})
         handler  (build-repl-handler compiler-env sessions)
         options  {:port port, :handler handler}]
