@@ -22,9 +22,16 @@
     (when-some [v (<! from)]
       (when (>! to v) (recur)))))
 
+(def ^:private top-level-forms
+  '#{ns require use require-macros use-macros})
+
+(defn- top-level? [form]
+  (and (list? form) (contains? top-level-forms (first form))))
+
 (defn- cljs->js [env form]
-  (let [js (build/compile env {} `((fn [] ~form)))]
-    (json/generate-string {:eval js})))
+  (let [form (if (top-level? form) form `((fn [] ~form)))
+        js   (build/compile env {} form)]
+    (json/generate-string {:eval #p js})))
 
 (defn- new-session [env]
   {:id  (random-uuid)
