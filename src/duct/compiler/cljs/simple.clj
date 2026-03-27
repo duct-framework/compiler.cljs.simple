@@ -3,7 +3,7 @@
             [cljs.analyzer.api :as ana]
             [cljs.build.api :as build]
             [cljs.closure :as clos]
-            [clojure.core.async :as a :refer [<! >! >!! <!!]]
+            [clojure.core.async :as a :refer [<! >! >!!]]
             [duct.server.http.jetty]
             [integrant.core :as ig]
             [ring.websocket.async :as wsa]
@@ -65,6 +65,9 @@
    (let [session-id (first (server-sessions server))]
      (eval-in-client server session-id form)))
   ([server session-id form]
+   (eval-in-client server session-id form 10000))
+  ([server session-id form timeout-ms]
    (let [{:keys [in out]} (-> server :sessions deref (get session-id))]
      (>!! in form)
-     (println (:value (<!! out))))))
+     (a/alt!! [out] ([{:keys [value]} _] (println value))
+              (a/timeout timeout-ms) (prn :timeout)))))
