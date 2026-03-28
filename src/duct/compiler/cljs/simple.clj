@@ -31,7 +31,7 @@
 (defn- cljs->js [env form]
   (let [form (if (top-level? form) form `((fn [] ~form)))
         js   (build/compile env {} form)]
-    (json/generate-string {:eval #p js})))
+    (json/generate-string {:eval js})))
 
 (defn- new-session [env]
   {:id  (random-uuid)
@@ -81,5 +81,5 @@
   ([server session-id form timeout-ms]
    (let [{:keys [in out]} (-> server :sessions deref (get session-id))]
      (>!! in form)
-     (a/alt!! [out] ([{:keys [value]} _] (println value))
+     (a/alt!! [out] ([{:keys [value error]} _] (println (or error value)))
               (a/timeout timeout-ms) (prn :timeout)))))

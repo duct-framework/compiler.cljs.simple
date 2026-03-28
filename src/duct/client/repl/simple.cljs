@@ -1,14 +1,19 @@
 (ns duct.client.repl.simple
-  (:require [clojure.core.async :as a :refer [<! >!]]
+  (:require [cljs.repl :as repl]
+            [clojure.core.async :as a :refer [<! >!]]
             [haslett.client :as ws]
             [haslett.format :as fmt]))
 
+(defn- eval-js [js]
+  (try {:value (str (js/eval js))}
+       (catch :default ex
+         {:error (repl/error->str ex)})))
+
 (defn- handle-messages [{:keys [in out]}]
   (a/go-loop []
-    (when-some [{form "eval"} (<! in)]
-      (let [result (js/eval form)]
-        (>! out {:value (pr-str result)})
-        (recur)))))
+    (when-some [{js "eval"} (<! in)]
+      (>! out (eval-js js))
+      (recur))))
 
 (defn connect
   ([] (connect "ws://localhost:9000"))
