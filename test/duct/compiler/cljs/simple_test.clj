@@ -22,29 +22,31 @@
 (deftest repl-test
   (try
     (let [sys (ig/init {::simple/build
-                        {:output-dir "target/cljs/js"
+                        {:asset-path "/js"
+                         :output-dir "target/cljs/js"
                          :output-to "target/cljs/js/main.js"
                          :optimizations :none
-                         :main 'duct.compiler.cljs.client-test}
+                         :main 'duct.compiler.cljs.client-test
+                         :preloads ['duct.client.repl.simple.preload]}
                         ::simple/repl-server
-                        {:build (ig/ref ::simple/build)}})
-          in    (-> sys ::simple/repl-server :in)
+                        {:port 9001
+                         :build (ig/ref ::simple/build)}}) 
           wsout (a/chan 128)
           ws    (ws/build-websocket
-                 "ws://localhost:9000/"
-                 {:on-text (fn [_ text _] (>!! wsout text))})]
+                 "ws://localhost:9001/"
+                 {:on-text (fn [_ text _] (>!! wsout text))})
+          in    (-> sys ::simple/repl-server :sessions deref first val :in)]
       (try
         (>!! in '(+ 1 1))
-        (is (= {"op"   "eval"
-                "form" "((1) + (1));\n"}
+        (is (= {"eval" "(function (){\nreturn ((1) + (1));\n}).call(null);\n"}
                (json/parse-string (<!! wsout))))
         (>!! in '(require '[clojure.string :as s]))
-        (is (= {"op"   "eval"
-                "form" "goog.require('clojure.string');\n"}
+        (is (= {"eval" "goog.require('clojure.string');\n"}
                (json/parse-string (<!! wsout))))
         (>!! in '(s/trim " foo "))
-        (is (= {"op"   "eval"
-                "form" "clojure.string.trim.call(null,\" foo \");\n"}
+        (is (= {"eval" (str "(function (){\nreturn "
+                            "clojure.string.trim.call(null,\" foo \");\n"
+                            "}).call(null);\n")}
                (json/parse-string (<!! wsout))))
         (finally
           (ws/close ws)
