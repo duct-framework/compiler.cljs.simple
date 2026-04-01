@@ -80,12 +80,12 @@
 (defn server-sessions [server]
   (-> server :sessions deref keys))
 
-(defn eval-in-client
+(defn eval-cljs
   ([server form]
    (let [session-id (first (server-sessions server))]
-     (eval-in-client server session-id form)))
+     (eval-cljs server session-id form)))
   ([server session-id form]
-   (eval-in-client server session-id form 10000))
+   (eval-cljs server session-id form 10000))
   ([server session-id form timeout-ms]
    (let [{:keys [in out]} (-> server :sessions deref (get session-id))]
      (>!! in form)
