@@ -5,9 +5,9 @@
             [haslett.format :as fmt]))
 
 (defn- eval-js [js]
-  (try {:value (str (js/eval js))}
-       (catch :default ex
-         {:error (repl/error->str ex)})))
+  (try {:value (pr-str (js/eval js))}
+       (catch :default e
+         {:error (pr-str (repl/ex-triage (repl/Error->map e)))})))
 
 (defn- handle-messages [{:keys [in out]}]
   (a/go-loop []
