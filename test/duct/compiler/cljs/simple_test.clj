@@ -28,14 +28,14 @@
                          :optimizations :none
                          :main 'duct.compiler.cljs.client-test
                          :preloads ['duct.client.repl.simple.preload]}
-                        ::simple/repl-server
+                        ::simple/server
                         {:port 9001
                          :build (ig/ref ::simple/build)}}) 
           wsout (a/chan 128)
           ws    (ws/build-websocket
                  "ws://localhost:9001/"
                  {:on-text (fn [_ text _] (>!! wsout text))})
-          in    (-> sys ::simple/repl-server :sessions deref first val :in)]
+          in    (-> sys ::simple/server :sessions deref first val :in)]
       (try
         (>!! in '(+ 1 1))
         (is (= {"eval" "(function (){\nreturn ((1) + (1));\n}).call(null);\n"}

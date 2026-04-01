@@ -14,5 +14,5 @@
    :preloads [duct.client.repl.simple.preload]
    :main test-project.client}
 
-  :duct.compiler.cljs.simple/repl-server
+  :duct.compiler.cljs.simple/server
   {:build #ig/ref :duct.compiler.cljs.simple/build}}}

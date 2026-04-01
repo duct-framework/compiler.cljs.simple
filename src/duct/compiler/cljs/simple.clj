@@ -65,7 +65,7 @@
   (let [main (-> @env :options :main)]
     (build/compile env {} (list 'require (list 'quote main)))))
 
-(defmethod ig/init-key ::repl-server
+(defmethod ig/init-key ::server
   [_ {{:keys [compiler-env]} :build, :keys [port] :or {port 9000}}]
   (compile-main compiler-env) 
   (let [sessions (atom {})
@@ -74,7 +74,7 @@
     {:sessions sessions
      :server   (ig/init-key :duct.server.http/jetty options)}))
 
-(defmethod ig/halt-key! ::repl-server [_ {:keys [server]}]
+(defmethod ig/halt-key! ::server [_ {:keys [server]}]
   (ig/halt-key! :duct.server.http/jetty server))
 
 (defn server-sessions [server]
