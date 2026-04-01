@@ -80,6 +80,10 @@
 (defn server-sessions [server]
   (-> server :sessions deref keys))
 
+(defn- timeout-exception [session-id form]
+  (ex-info (str "Timeout evaluating " form " on session " session-id)
+           {:session-id session-id, :form form}))
+
 (defn eval-cljs
   ([server form]
    (let [session-id (first (server-sessions server))]
@@ -89,5 +93,7 @@
   ([server session-id form timeout-ms]
    (let [{:keys [in out]} (-> server :sessions deref (get session-id))]
      (>!! in form)
-     (a/alt!! [out] ([{:keys [value error]} _] (println (or error value)))
-              (a/timeout timeout-ms) (prn :timeout)))))
+     (a/alt!! [out]
+              ([{:keys [value error]} _] (println (or error value)))
+              (a/timeout timeout-ms)
+              (throw (timeout-exception session-id form))))))
