@@ -20,46 +20,28 @@
     (build/build src (dissoc opts :src) env)
     (assoc opts :compiler-env env)))
 
-(def ^:private top-level-forms
-  '#{ns require use require-macros use-macros})
-
-(defn- top-level? [form]
-  (and (list? form) (contains? top-level-forms (first form))))
-
-(defn- cljs->js [env form]
-  (let [form (if (top-level? form) form `((fn [] ~form)))
-        js   (build/compile env {} form)]
-    (json/generate-string {:eval js})))
+(defn- pipe [from to]
+  (a/go-loop []
+    (when-some [v (<! from)]
+      (when (>! to v) (recur)))))
 
 (defn- new-session [env]
-  {:id (random-uuid), :env env, :in (a/chan 128), :out (a/chan 128)})
+  {:id  (random-uuid)
+   :env env
+   :in  (a/chan 128 (map #(json/generate-string %)))
+   :out (a/chan 128 (map #(json/parse-string % true)))})
 
 (defn- close-session! [{:keys [in out]}]
   (a/close! in) (a/close! out))
-
-(defn- read-loop [{:keys [env in out]} ws-out]
-  (a/go-loop []
-    (when-some [form (<! in)]
-      (let [js-or-error (try (cljs->js env form)
-                             (catch Exception ex ex))]
-        (if (string? js-or-error)
-          (when (>! ws-out js-or-error) (recur))
-          (when (>! out {:error js-or-error}) (recur)))))))
-
-(defn- print-loop [{:keys [out]} ws-in]
-  (a/go-loop []
-    (when-some [result (<! ws-in)]
-      (when (>! out (json/parse-string result true))
-        (recur)))))
 
 (defn- build-repl-handler [env sessions]
   (wrap-websocket-keepalive
    (fn [_request]
      (wsa/go-websocket [ws-in ws-out]
-       (let [{:keys [id] :as sess} (new-session env)]
+       (let [{:keys [id in out] :as sess} (new-session env)]
          (swap! sessions assoc id sess)
          (try
-           (a/alts! [(read-loop sess ws-out) (print-loop sess ws-in)])
+           (a/alts! [(pipe in ws-out) (pipe ws-in out)])
            (finally
              (close-session! sess)
              (swap! sessions dissoc id))))))))
@@ -95,11 +77,21 @@
   (ex-info (str "Timeout evaluating " form " on session " session-id)
            {:session-id session-id, :form form}))
 
+(def ^:private top-level-forms
+  '#{ns require use require-macros use-macros})
+
+(defn- top-level? [form]
+  (and (list? form) (contains? top-level-forms (first form))))
+
+(defn- cljs->js [env form]
+  (let [form (if (top-level? form) form `((fn [] ~form)))]
+    (build/compile env {} form)))
+
 (defn eval-cljs
   ([session form]
    (eval-cljs session form 10000))
-  ([{:keys [id in out]} form timeout-ms]
-   (>!! in form)
+  ([{:keys [id env in out]} form timeout-ms]
+   (>!! in {:eval (cljs->js env form)})
    (a/alt!! [out]
             ([{:keys [value error]} _] (println (or error value)))
             (a/timeout timeout-ms)
