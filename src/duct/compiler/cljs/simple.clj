@@ -68,16 +68,25 @@
   (let [main (-> @env :options :main)]
     (build/compile env {} (list 'require (list 'quote main)))))
 
+(defn- init-tracker [sources]
+  (-> (track/tracker)
+      (dir/scan-dirs sources {:platform find/cljs :add-all? true})
+      (dissoc ::track/load ::track/unload)))
+
+(defn- update-tracker [tracker]
+  (dir/scan-files tracker (::dir/files tracker) {:platform find/cljs}))
+
 (defmethod ig/init-key ::server
   [_ {{:keys [compiler-env src] :or {src "src"}} :build
       :keys [port] :or {port 9000}}]
   (compile-main compiler-env) 
-  (let [sessions (atom {})
-        handler  (build-repl-handler compiler-env sessions)
-        options  {:port port, :handler handler}]
+  (let [sessions    (atom {})
+        handler     (build-repl-handler compiler-env sessions)
+        server-opts {:port port, :handler handler}]
     {:sessions sessions
-     :server   (ig/init-key :duct.server.http/jetty options)
-     :tracker  (dir/scan-dirs {} [src] {:platform find/cljs :add-all? true})}))
+     :handler  handler
+     :server   (ig/init-key :duct.server.http/jetty server-opts)
+     :tracker  (init-tracker [src])}))
 
 (defmethod ig/halt-key! ::server [_ {:keys [server]}]
   (ig/halt-key! :duct.server.http/jetty server))
@@ -103,8 +112,21 @@
               (a/timeout timeout-ms)
               (throw (timeout-exception session-id form))))))
 
-(defn modified-namespaces [{:keys [tracker]}]
-  (-> tracker
-      (dissoc ::track/load ::track/unload)
-      (dir/scan-files (::dir/files tracker) {:platform find/cljs})
-      ::track/load))
+(defmethod ig/suspend-key! ::server [_ {:keys [server]}]
+  (ig/suspend-key! :duct.server.http/jetty server))
+
+(defmethod ig/resume-key ::server
+  [_ {{:keys [compiler-env]} :build new-port :port}
+   {:keys [port]}
+   {:keys [sessions server tracker handler] :as serv}]
+  (compile-main compiler-env)
+  (let [new-handler (build-repl-handler compiler-env sessions)
+        new-opts    {:port new-port :handler new-handler}
+        old-opts    {:port port :handler handler}
+        tracker     (update-tracker tracker)]
+    (doseq [{:keys [id]} @sessions]
+      (doseq [ns-sym (::track/load tracker)]
+        (eval-cljs serv id `(~'require '~ns-sym :reload))))
+    {:sessions sessions
+     :server   (ig/resume-key :duct.server.http/jetty new-opts old-opts server)
+     :tracker  (dissoc tracker ::track/load ::track/unload)}))
