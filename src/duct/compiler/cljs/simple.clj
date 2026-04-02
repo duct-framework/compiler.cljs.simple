@@ -91,26 +91,19 @@
 (defmethod ig/halt-key! ::server [_ {:keys [server]}]
   (ig/halt-key! :duct.server.http/jetty server))
 
-(defn server-sessions [server]
-  (-> server :sessions deref keys))
-
 (defn- timeout-exception [session-id form]
   (ex-info (str "Timeout evaluating " form " on session " session-id)
            {:session-id session-id, :form form}))
 
 (defn eval-cljs
-  ([server form]
-   (let [session-id (first (server-sessions server))]
-     (eval-cljs server session-id form)))
-  ([server session-id form]
-   (eval-cljs server session-id form 10000))
-  ([server session-id form timeout-ms]
-   (let [{:keys [in out]} (-> server :sessions deref (get session-id))]
-     (>!! in form)
-     (a/alt!! [out]
-              ([{:keys [value error]} _] (println (or error value)))
-              (a/timeout timeout-ms)
-              (throw (timeout-exception session-id form))))))
+  ([session form]
+   (eval-cljs session form 10000))
+  ([{:keys [id in out]} form timeout-ms]
+   (>!! in form)
+   (a/alt!! [out]
+            ([{:keys [value error]} _] (println (or error value)))
+            (a/timeout timeout-ms)
+            (throw (timeout-exception id form)))))
 
 (defmethod ig/suspend-key! ::server [_ {:keys [server]}]
   (ig/suspend-key! :duct.server.http/jetty server))
@@ -118,15 +111,15 @@
 (defmethod ig/resume-key ::server
   [_ {{:keys [compiler-env]} :build new-port :port}
    {:keys [port]}
-   {:keys [sessions server tracker handler] :as serv}]
+   {:keys [sessions server tracker handler]}]
   (compile-main compiler-env)
   (let [new-handler (build-repl-handler compiler-env sessions)
         new-opts    {:port new-port :handler new-handler}
         old-opts    {:port port :handler handler}
         tracker     (update-tracker tracker)]
-    (doseq [{:keys [id]} @sessions]
+    (doseq [session (vals @sessions)]
       (doseq [ns-sym (::track/load tracker)]
-        (eval-cljs serv id `(~'require '~ns-sym :reload))))
+        (eval-cljs session (list 'require (list 'quote ns-sym) :reload))))
     {:sessions sessions
      :server   (ig/resume-key :duct.server.http/jetty new-opts old-opts server)
      :tracker  (dissoc tracker ::track/load ::track/unload)}))
