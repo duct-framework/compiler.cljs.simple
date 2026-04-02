@@ -4,6 +4,10 @@
             [cljs.build.api :as build]
             [cljs.closure :as clos]
             [clojure.core.async :as a :refer [<! >! >!!]]
+            [clojure.java.io :as io]
+            [clojure.tools.namespace.dir :as dir]
+            [clojure.tools.namespace.find :as find]
+            [clojure.tools.namespace.track :as track]
             [duct.server.http.jetty]
             [integrant.core :as ig]
             [ring.websocket.async :as wsa]
@@ -12,10 +16,10 @@
 (defn- compiler-env [opts]
   (ana/empty-state (-> opts (dissoc :foreign-libs) (clos/add-externs-sources))))
 
-(defmethod ig/init-key ::build [_ {:keys [source] :as opts}]
+(defmethod ig/init-key ::build [_ {:keys [src] :as opts}]
   (let [env (compiler-env {})]
-    (build/build source (dissoc opts :source) env)
-    {:compiler-env env}))
+    (build/build src (dissoc opts :src) env)
+    (assoc opts :compiler-env env)))
 
 (def ^:private top-level-forms
   '#{ns require use require-macros use-macros})
@@ -97,3 +101,11 @@
               ([{:keys [value error]} _] (println (or error value)))
               (a/timeout timeout-ms)
               (throw (timeout-exception session-id form))))))
+
+(defn modified-namespaces [{:keys [src output-to] :or {src "src"}}]
+  (let [tracker (dir/scan-dirs {} [src] {:platform find/cljs :add-all? true})]
+    (-> tracker
+        (dissoc ::track/load ::track/unload)
+        (assoc ::dir/time (.lastModified (io/file output-to)))
+        (dir/scan-files (::dir/files tracker) {:platform find/cljs})
+        ::track/load)))
