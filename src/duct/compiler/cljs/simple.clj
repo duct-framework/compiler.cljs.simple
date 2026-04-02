@@ -4,7 +4,6 @@
             [cljs.build.api :as build]
             [cljs.closure :as clos]
             [clojure.core.async :as a :refer [<! >! >!!]]
-            [clojure.java.io :as io]
             [clojure.tools.namespace.dir :as dir]
             [clojure.tools.namespace.find :as find]
             [clojure.tools.namespace.track :as track]
@@ -70,13 +69,15 @@
     (build/compile env {} (list 'require (list 'quote main)))))
 
 (defmethod ig/init-key ::server
-  [_ {{:keys [compiler-env]} :build, :keys [port] :or {port 9000}}]
+  [_ {{:keys [compiler-env src] :or {src "src"}} :build
+      :keys [port] :or {port 9000}}]
   (compile-main compiler-env) 
   (let [sessions (atom {})
         handler  (build-repl-handler compiler-env sessions)
         options  {:port port, :handler handler}]
     {:sessions sessions
-     :server   (ig/init-key :duct.server.http/jetty options)}))
+     :server   (ig/init-key :duct.server.http/jetty options)
+     :tracker  (dir/scan-dirs {} [src] {:platform find/cljs :add-all? true})}))
 
 (defmethod ig/halt-key! ::server [_ {:keys [server]}]
   (ig/halt-key! :duct.server.http/jetty server))
@@ -102,10 +103,8 @@
               (a/timeout timeout-ms)
               (throw (timeout-exception session-id form))))))
 
-(defn modified-namespaces [{:keys [src output-to] :or {src "src"}}]
-  (let [tracker (dir/scan-dirs {} [src] {:platform find/cljs :add-all? true})]
-    (-> tracker
-        (dissoc ::track/load ::track/unload)
-        (assoc ::dir/time (.lastModified (io/file output-to)))
-        (dir/scan-files (::dir/files tracker) {:platform find/cljs})
-        ::track/load)))
+(defn modified-namespaces [{:keys [tracker]}]
+  (-> tracker
+      (dissoc ::track/load ::track/unload)
+      (dir/scan-files (::dir/files tracker) {:platform find/cljs})
+      ::track/load))
