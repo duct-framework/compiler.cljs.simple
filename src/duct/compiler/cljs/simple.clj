@@ -97,7 +97,8 @@
   ([session form]
    (eval-cljs session form 10000))
   ([{:keys [env] :as session} form timeout-ms]
-   (let [result (remote-call session {:eval (cljs->js env form)} timeout-ms)]
+   (let [mesg   {:op :eval :js (cljs->js env form)}
+         result (remote-call session mesg timeout-ms)]
      (println (or (:error result) (:value result))))))
 
 (defmethod ig/suspend-key! ::server [_ {:keys [server]}]
@@ -111,9 +112,10 @@
   (let [new-handler (build-repl-handler compiler-env sessions)
         new-opts    {:port new-port :handler new-handler}
         old-opts    {:port port :handler handler}
-        tracker     (update-tracker tracker)]
+        tracker     (update-tracker tracker)
+        reload-mesg {:op :load :namespaces (::track/load tracker)}]
     (doseq [session (vals @sessions)]
-      (remote-call session {:reload (::track/load tracker)} 10000))
+      (remote-call session reload-mesg 10000))
     {:sessions sessions
      :server   (ig/resume-key :duct.server.http/jetty new-opts old-opts server)
      :tracker  (dissoc tracker ::track/load ::track/unload)}))
