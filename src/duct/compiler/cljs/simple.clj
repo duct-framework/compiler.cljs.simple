@@ -87,15 +87,17 @@
   (let [form (if (top-level? form) form `((fn [] ~form)))]
     (build/compile env {} form)))
 
+(defn- remote-call [{:keys [id in out]} mesg timeout-ms]
+  (>!! in mesg)
+  (a/alt!! [out]                  ([result _] result)
+           (a/timeout timeout-ms) (throw (timeout-exception id mesg))))
+
 (defn eval-cljs
   ([session form]
    (eval-cljs session form 10000))
-  ([{:keys [id env in out]} form timeout-ms]
-   (>!! in {:eval (cljs->js env form)})
-   (a/alt!! [out]
-            ([{:keys [value error]} _] (println (or error value)))
-            (a/timeout timeout-ms)
-            (throw (timeout-exception id form)))))
+  ([{:keys [env] :as session} form timeout-ms]
+   (let [result (remote-call session {:eval (cljs->js env form)} timeout-ms)]
+     (println (or (:error result) (:value result))))))
 
 (defmethod ig/suspend-key! ::server [_ {:keys [server]}]
   (ig/suspend-key! :duct.server.http/jetty server))
