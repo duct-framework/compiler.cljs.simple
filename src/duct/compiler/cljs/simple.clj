@@ -73,9 +73,10 @@
 (defmethod ig/halt-key! ::server [_ {:keys [server]}]
   (ig/halt-key! :duct.server.http/jetty server))
 
-(defn- timeout-exception [session-id form]
-  (ex-info (str "Timeout evaluating " form " on session " session-id)
-           {:session-id session-id, :form form}))
+(defn- timeout-exception [session-id mesg]
+  (ex-info (str "Timeout waiting for a response from session " session-id
+                " for message: " (pr-str mesg))
+           {:session-id session-id, :message mesg}))
 
 (def ^:private top-level-forms
   '#{ns require use require-macros use-macros})
