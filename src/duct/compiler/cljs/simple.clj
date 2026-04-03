@@ -112,8 +112,7 @@
         old-opts    {:port port :handler handler}
         tracker     (update-tracker tracker)]
     (doseq [session (vals @sessions)]
-      (doseq [ns-sym (::track/load tracker)]
-        (eval-cljs session (list 'require (list 'quote ns-sym) :reload))))
+      (remote-call session {:reload (::track/load tracker)} 10000))
     {:sessions sessions
      :server   (ig/resume-key :duct.server.http/jetty new-opts old-opts server)
      :tracker  (dissoc tracker ::track/load ::track/unload)}))
