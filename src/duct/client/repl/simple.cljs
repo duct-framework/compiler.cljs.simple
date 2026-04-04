@@ -16,12 +16,35 @@
 (defn- demunge-ns [ns-str]
   (str/replace ns-str "-" "_"))
 
+(defn- notify-element [message]
+ (let [element (js/document.createElement "div")]
+    (set! (.. element -style -cssText)
+          (str "position:fixed;bottom:16px;right:16px;padding:7px 14px;"
+               "background:#333;color:#fff;border-radius:8px;"
+               "font-family:sans-serif;font-size:14px;"
+               "opacity:0;transition:opacity 0.5s ease-in-out;z-index:999999;"))
+    (set! (.-textContent element) message)
+    element))
+
+(defn- show-notify [element]
+  (js/document.body.appendChild element)
+  (js/setTimeout #(set! (.. element -style -opacity) "1") 0))
+
+(defn- hide-notify [element]
+  (set! (.. element -style -opacity) "0")
+  (js/setTimeout #(some-> (.-parentNode element) (.removeChild element)) 500))
+
 (defn- load-namespaces [namespaces]
-  (try (doseq [ns-str namespaces]
-         (js/goog.require (demunge-ns ns-str) "reload"))
-       {:value :reloaded}
-       (catch :default e
-         {:error (pr-str (parse-error e))})))
+  (let [notify (notify-element "Reloading...")]
+    (try (show-notify notify)
+         (doseq [ns-str namespaces]
+           (js/console.info (str "Reloading: " ns-str))
+           (js/goog.require (demunge-ns ns-str) "reload"))
+         {:value :reloaded}
+         (catch :default e
+           {:error (pr-str (parse-error e))})
+         (finally
+           (js/setTimeout #(hide-notify notify) 500)))))
 
 (defn- handle-messages [{:keys [in out]}]
   (a/go-loop []
