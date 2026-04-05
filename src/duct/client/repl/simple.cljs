@@ -38,8 +38,8 @@
   (let [notify (notify-element "Reloading...")]
     (try (show-notify notify)
          (doseq [ns-str namespaces]
-           (js/console.info (str "Reloading: " ns-str))
-           (js/goog.require (demunge-ns ns-str) "reload"))
+           (js/goog.require (demunge-ns ns-str) "reload")
+           (js/console.debug (str "Reloaded " ns-str)))
          {:value :reloaded}
          (catch :default e
            {:error (pr-str (parse-error e))})
@@ -61,8 +61,8 @@
   ([url]
    (a/go-loop []
      (let [ws (<! (ws/connect url {:format fmt/json}))]
-       (js/console.log "REPL connected.")
+       (js/console.info "REPL connected.")
        (<! (handle-messages ws))
-       (js/console.log "REPL closed. Retrying...")
+       (js/console.warn "REPL closed. Retrying...")
        (<! (a/timeout 1000))
        (recur)))))
