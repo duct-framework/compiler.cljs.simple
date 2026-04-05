@@ -6,4 +6,5 @@
         integrant/integrant {:mvn/version "1.0.1"}
         org.duct-framework/server.http.jetty {:mvn/version "0.3.4"}
         org.ring-clojure/ring-websocket-async {:mvn/version "0.2.0"}
-        org.ring-clojure/ring-websocket-middleware {:mvn/version "0.2.1"}}}
+        org.ring-clojure/ring-websocket-middleware {:mvn/version "0.2.1"}
+        no.cjohansen/replicant {:mvn/version "2025.12.1"}}}

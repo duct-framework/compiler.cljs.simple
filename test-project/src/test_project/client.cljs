@@ -1,5 +1,9 @@
 (ns test-project.client
-  (:require [test-project.support :as sup]))
+  (:require [replicant.dom :as r]
+            [test-project.support :as sup]))
 
-(let [content (js/document.getElementById "content")]
-  (set! (.-textContent content) (sup/greet "World")))
+(r/render
+ (js/document.getElementById "content")
+ [:div
+  [:p "This is a test."]
+  [:p (sup/greet "World") "."]])          
