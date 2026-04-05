@@ -48,12 +48,13 @@
 
 (defn- handle-messages [{:keys [in out]}]
   (a/go-loop []
-    (when-some [mesg (<! in)]
-      (>! out (case (mesg "op")
-                "eval" (eval-js (mesg "js"))
-                "load" (load-namespaces (mesg "namespaces"))
-                {:error {:message "No matching clause."}}))
-      (recur))))
+    (when-some [{:strs [id] :as mesg} (<! in)]
+      (let [response (case (mesg "op")
+                       "eval" (eval-js (mesg "js"))
+                       "load" (load-namespaces (mesg "namespaces"))
+                       {:error {:message "No matching clause."}})]
+        (>! out (assoc response :id id))
+        (recur)))))
 
 (defn connect
   ([] (connect "ws://localhost:9000"))

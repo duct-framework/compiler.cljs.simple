@@ -26,10 +26,11 @@
       (when (>! to v) (recur)))))
 
 (defn- new-session [env]
-  {:id  (random-uuid)
-   :env env
-   :in  (a/chan 128 (map #(json/generate-string %)))
-   :out (a/chan 128 (map #(json/parse-string % true)))})
+  {:id      (random-uuid)
+   :env     env
+   :mesg-id (atom 0)
+   :in      (a/chan 128 (map #(json/generate-string %)))
+   :out     (a/chan 128 (map #(json/parse-string % true)))})
 
 (defn- close-session! [{:keys [in out]}]
   (a/close! in) (a/close! out))
@@ -73,10 +74,10 @@
 (defmethod ig/halt-key! ::server [_ {:keys [server]}]
   (ig/halt-key! :duct.server.http/jetty server))
 
-(defn- timeout-exception [session-id mesg]
-  (ex-info (str "Timeout waiting for a response from session " session-id
+(defn- timeout-exception [{:keys [id]} mesg]
+  (ex-info (str "Timeout waiting for a response from session " id
                 " for message: " (pr-str mesg))
-           {:session-id session-id, :message mesg}))
+           {:session-id id, :message mesg}))
 
 (def ^:private top-level-forms
   '#{ns require use require-macros use-macros})
@@ -88,16 +89,20 @@
   (let [form (if (top-level? form) form `((fn [] ~form)))]
     (build/compile env {} form)))
 
-(defn- remote-call [{:keys [id in out]} mesg timeout-ms]
-  (>!! in mesg)
-  (a/alt!! [out]                  ([result _] result)
-           (a/timeout timeout-ms) (throw (timeout-exception id mesg))))
+(defn- remote-call [{:keys [mesg-id in out] :as session} mesg timeout-ms]
+  (let [next-id (swap! mesg-id inc)]
+    (>!! in (assoc mesg :id next-id))
+    (a/alt!! [out] ([{:keys [id] :as result} _]
+                    (assert (= id next-id) "response ID out of sequence")
+                    result)
+             (a/timeout timeout-ms)
+             (throw (timeout-exception session mesg)))))
 
 (defn eval-cljs
   ([session form]
    (eval-cljs session form 10000))
   ([{:keys [env] :as session} form timeout-ms]
-   (let [mesg   {:op :eval :js (cljs->js env form)}
+   (let [ mesg  {:op :eval :js (cljs->js env form)}
          result (remote-call session mesg timeout-ms)]
      (println (or (:error result) (:value result))))))
 
