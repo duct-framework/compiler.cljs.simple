@@ -16,13 +16,22 @@
 (defn- demunge-ns [ns-str]
   (str/replace ns-str "-" "_"))
 
+(def ^:private logo-data-url
+  (str "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox="
+       "'0 0 160 160'%3E%3Cpath fill='%235881d8' d='M0,0v120h120V40l-20,20v40"
+       "H20V20h100l10,10,15-15L130,0Z'/%3E%3Cpath fill='%2375d23b' d='M145,15"
+       "l-15,15c-.179-1.199,10,10,10,10V140H60V120H40v40h120V30Z'/%3E%3Cpath "
+       "fill='%2375d23b' d='M60,100V60h40l20-20H40v60Z'/%3E%3C/svg%3E"))
+
 (defn- notify-element [message]
  (let [element (js/document.createElement "div")]
     (set! (.. element -style -cssText)
-          (str "position:fixed;bottom:16px;right:16px;padding:7px 14px;"
-               "background:#333;color:#fff;border-radius:8px;"
+          (str "position:fixed;bottom:16px;right:16px;"
+               "color:#fff;border-radius:8px;padding:7px 14px 7px 34px;"
                "font-family:sans-serif;font-size:14px;"
-               "opacity:0;transition:opacity 0.5s ease-in-out;z-index:999999;"))
+               "opacity:0;transition:opacity 0.5s ease-in-out;z-index:999999;"
+               "background:#333 12px 8px/16px 16px no-repeat;"
+               "background-image:url(\"" logo-data-url "\");"))
     (set! (.-textContent element) message)
     element))
 
