@@ -4,6 +4,7 @@
   :dependencies [[org.clojure/clojure "1.12.4"]
                  [org.clojure/clojurescript "1.12.134"]
                  [org.clojure/core.async "1.9.865"]
+                 [org.clojure/java.classpath "1.1.1"]
                  [org.clojure/tools.namespace "1.5.1"]
                  [cheshire "5.13.0"]
                  [haslett "0.2.0"]

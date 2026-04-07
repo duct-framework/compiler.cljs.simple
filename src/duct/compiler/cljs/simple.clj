@@ -4,6 +4,7 @@
             [cljs.build.api :as build]
             [cljs.closure :as clos]
             [clojure.core.async :as a :refer [<! >! >!!]]
+            [clojure.java.classpath :as cp]
             [clojure.tools.namespace.dir :as dir]
             [clojure.tools.namespace.find :as find]
             [clojure.tools.namespace.track :as track]
@@ -51,17 +52,18 @@
   (let [main (-> @env :options :main)]
     (build/compile env {} (list 'require (list 'quote main)))))
 
-(defn- init-tracker [sources]
+(defn- init-tracker [dirs]
   (-> (track/tracker)
-      (dir/scan-dirs sources {:platform find/cljs :add-all? true})
+      (dir/scan-dirs dirs {:platform find/cljs :add-all? true})
+      (assoc ::dirs dirs)
       (dissoc ::track/load ::track/unload)))
 
 (defn- update-tracker [tracker]
-  (dir/scan-files tracker (::dir/files tracker) {:platform find/cljs}))
+  (dir/scan-dirs tracker (::dirs tracker) {:platform find/cljs}))
 
 (defmethod ig/init-key ::server
-  [_ {{:keys [compiler-env src] :or {src "src"}} :build
-      :keys [port] :or {port 9000}}]
+  [_ {{:keys [compiler-env]} :build
+      :keys [port dirs] :or {port 9000, dirs (cp/classpath-directories)}}]
   (compile-main compiler-env) 
   (let [sessions    (atom {})
         handler     (build-repl-handler compiler-env sessions)
@@ -69,7 +71,7 @@
     {:sessions sessions
      :handler  handler
      :server   (ig/init-key :duct.server.http/jetty server-opts)
-     :tracker  (init-tracker [src])}))
+     :tracker  (init-tracker dirs)}))
 
 (defmethod ig/halt-key! ::server [_ {:keys [server]}]
   (ig/halt-key! :duct.server.http/jetty server))
