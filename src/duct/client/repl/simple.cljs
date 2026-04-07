@@ -8,7 +8,7 @@
   (repl/ex-triage (repl/Error->map e)))
 
 (defn- eval-js [js]
-  (try {:value (pr-str (js/eval js))}
+  (try {:value (pr-str (js* "(0,eval)(~{})" js))}
        (catch :default e
          {:error (pr-str (parse-error e))})))
 
