@@ -1,7 +1,6 @@
 (ns duct.client.repl.simple
   (:require [cljs.repl :as repl]
             [clojure.core.async :as a :refer [<! >!]]
-            [clojure.string :as str]
             [haslett.client :as ws]
             [haslett.format :as fmt]))
 
@@ -12,9 +11,6 @@
   (try {:value (pr-str (js/eval js))}
        (catch :default e
          {:error (pr-str (parse-error e))})))
-
-(defn- demunge-ns [ns-str]
-  (str/replace ns-str "-" "_"))
 
 (def ^:private logo-data-url
   (str "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox="
@@ -47,7 +43,7 @@
   (let [notify (notify-element "Reloading...")]
     (try (show-notify notify)
          (doseq [ns-str namespaces]
-           (js/goog.require (demunge-ns ns-str) "reload")
+           (js/goog.require (munge ns-str) "reload")
            (js/console.debug (str "Reloaded " ns-str)))
          {:value :reloaded}
          (catch :default e
