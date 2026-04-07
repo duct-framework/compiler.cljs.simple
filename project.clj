@@ -9,6 +9,7 @@
                  [cheshire "5.13.0"]
                  [haslett "0.2.0"]
                  [integrant "1.0.1"]
+                 [org.duct-framework/logger "0.4.0"]
                  [org.duct-framework/server.http.jetty "0.3.4"]
                  [org.ring-clojure/ring-websocket-async "0.2.0"]
                  [org.ring-clojure/ring-websocket-middleware "0.2.1"]]

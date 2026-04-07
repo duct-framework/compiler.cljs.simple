@@ -15,4 +15,5 @@
    :main test-project.client}
 
   :duct.compiler.cljs.simple/server
-  {:build #ig/ref :duct.compiler.cljs.simple/build}}}
+  {:build #ig/ref :duct.compiler.cljs.simple/build
+   :logger #ig/ref :duct/logger}}}

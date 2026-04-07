@@ -8,6 +8,7 @@
             [clojure.tools.namespace.dir :as dir]
             [clojure.tools.namespace.find :as find]
             [clojure.tools.namespace.track :as track]
+            [duct.logger :as log]
             [duct.server.http.jetty]
             [integrant.core :as ig]
             [ring.websocket.async :as wsa]
@@ -16,9 +17,10 @@
 (defn- compiler-env [opts]
   (ana/empty-state (-> opts (dissoc :foreign-libs) (clos/add-externs-sources))))
 
-(defmethod ig/init-key ::build [_ {:keys [src] :as opts}]
+(defmethod ig/init-key ::build [_ {:keys [src logger output-to] :as opts}]
   (let [env (compiler-env {})]
     (build/build src (dissoc opts :src) env)
+    (log/info logger ::build-complete {:output-to output-to})
     (assoc opts :compiler-env env)))
 
 (defn- pipe [from to]
@@ -63,17 +65,20 @@
 
 (defmethod ig/init-key ::server
   [_ {{:keys [compiler-env]} :build
-      :keys [port dirs] :or {port 9000, dirs (cp/classpath-directories)}}]
+      :keys [logger port dirs] :or {port 9000, dirs (cp/classpath-directories)}}]
   (compile-main compiler-env) 
   (let [sessions    (atom {})
         handler     (build-repl-handler compiler-env sessions)
         server-opts {:port port, :handler handler}]
+    (log/info logger ::starting-server {:port port})
     {:sessions sessions
+     :logger   logger
      :handler  handler
      :server   (ig/init-key :duct.server.http/jetty server-opts)
      :tracker  (init-tracker dirs)}))
 
-(defmethod ig/halt-key! ::server [_ {:keys [server]}]
+(defmethod ig/halt-key! ::server [_ {:keys [logger server]}]
+  (log/info logger ::stopping-server)
   (ig/halt-key! :duct.server.http/jetty server))
 
 (defn- timeout-exception [{:keys [id]} mesg]
@@ -112,17 +117,19 @@
   (ig/suspend-key! :duct.server.http/jetty server))
 
 (defmethod ig/resume-key ::server
-  [_ {{:keys [compiler-env]} :build new-port :port}
+  [_ {{:keys [compiler-env]} :build new-port :port, logger :logger}
    {:keys [port]}
    {:keys [sessions server tracker handler]}]
   (compile-main compiler-env)
   (let [new-handler (build-repl-handler compiler-env sessions)
         new-opts    {:port new-port :handler new-handler}
         old-opts    {:port port :handler handler}
-        tracker     (update-tracker tracker)
-        reload-mesg {:op :load :namespaces (::track/load tracker)}]
-    (doseq [session (vals @sessions)]
-      (remote-call session reload-mesg 10000))
+        tracker     (update-tracker tracker)] 
+    (when-some [reloaded (seq (::track/load tracker))]
+      (let [reload-mesg {:op :load :namespaces (::track/load tracker)}]
+        (doseq [session (vals @sessions)]
+           (remote-call session reload-mesg 10000)))
+      (log/report logger :cljs/reloaded reloaded)) 
     {:sessions sessions
      :server   (ig/resume-key :duct.server.http/jetty new-opts old-opts server)
      :tracker  (dissoc tracker ::track/load ::track/unload)}))
