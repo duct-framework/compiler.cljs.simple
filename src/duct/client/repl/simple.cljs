@@ -19,17 +19,18 @@
        "l-15,15c-.179-1.199,10,10,10,10V140H60V120H40v40h120V30Z'/%3E%3Cpath "
        "fill='%2375d23b' d='M60,100V60h40l20-20H40v60Z'/%3E%3C/svg%3E"))
 
+(def ^:private notify-css-style
+  (str "position:fixed;bottom:16px;right:16px;"
+       "color:#fff;border-radius:8px;padding:7px 14px 7px 34px;"
+       "font-family:sans-serif;font-size:14px;"
+       "opacity:0;transition:opacity 0.5s ease-in-out;z-index:999999;"
+       "background:#333 12px 8px/16px 16px no-repeat;"
+       "background-image:url(\"" logo-data-url "\");"))
+
 (defn- notify-element [message]
- (let [element (js/document.createElement "div")]
-    (set! (.. element -style -cssText)
-          (str "position:fixed;bottom:16px;right:16px;"
-               "color:#fff;border-radius:8px;padding:7px 14px 7px 34px;"
-               "font-family:sans-serif;font-size:14px;"
-               "opacity:0;transition:opacity 0.5s ease-in-out;z-index:999999;"
-               "background:#333 12px 8px/16px 16px no-repeat;"
-               "background-image:url(\"" logo-data-url "\");"))
-    (set! (.-textContent element) message)
-    element))
+  (doto (js/document.createElement "div")
+    (as-> e (set! (.. e -style -cssText) notify-css-style))
+    (as-> e (set! (.-textContent e) message))))
 
 (defn- show-notify [element]
   (js/document.body.appendChild element)
