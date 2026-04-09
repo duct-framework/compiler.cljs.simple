@@ -40,14 +40,20 @@
   (set! (.. element -style -opacity) "0")
   (js/setTimeout #(some-> (.-parentNode element) (.removeChild element)) 500))
 
+(defn- patch-goog! []
+  (set! js/goog.provide js/goog.constructNamespace_)
+  (set! js/goog.require js/goog.module.get))
+
 (defn- load-namespaces [namespaces]
   (let [notify (notify-element "Reloading...")]
+    (patch-goog!)
     (try (show-notify notify)
-         (doseq [ns-str namespaces]
-           (js/goog.require (munge ns-str) "reload")
+         (doseq [{ns-str "ns" src "src"} namespaces]
+           (js* "(0,eval)(~{})" src)
            (js/console.debug (str "Reloaded " ns-str)))
          {:value :reloaded}
          (catch :default e
+           (js/console.error e)
            {:error (pr-str (parse-error e))})
          (finally
            (js/setTimeout #(hide-notify notify) 500)))))
@@ -57,7 +63,7 @@
     (when-some [{:strs [id] :as mesg} (<! in)]
       (let [response (case (mesg "op")
                        "eval" (eval-js (mesg "js"))
-                       "load" (load-namespaces (mesg "namespaces"))
+                       "load" (load-namespaces (mesg "reload"))
                        {:error {:message "No matching clause."}})]
         (>! out (assoc response :id id))
         (recur)))))

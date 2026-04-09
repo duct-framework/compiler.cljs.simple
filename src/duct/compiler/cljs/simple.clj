@@ -3,6 +3,7 @@
             [cljs.analyzer.api :as ana]
             [cljs.build.api :as build]
             [cljs.closure :as clos]
+            [cljs.util :as util]
             [clojure.core.async :as a :refer [<! >! >!!]]
             [clojure.java.classpath :as cp]
             [clojure.tools.namespace.dir :as dir]
@@ -109,27 +110,35 @@
   ([session form]
    (eval-cljs session form 10000))
   ([{:keys [env] :as session} form timeout-ms]
-   (let [ mesg  {:op :eval :js (cljs->js env form)}
+   (let [mesg   {:op :eval :js (cljs->js env form)}
          result (remote-call session mesg timeout-ms)]
      (println (or (:error result) (:value result))))))
 
 (defmethod ig/suspend-key! ::server [_ {:keys [server]}]
   (ig/suspend-key! :duct.server.http/jetty server))
 
+(defn- add-ns-src [ns-sym {:keys [asset-path output-dir]}]
+  (let [uri (str asset-path "/" (util/ns->relpath ns-sym :js))
+        f   (build/target-file-for-cljs-ns ns-sym output-dir)]
+    {:ns ns-sym :src (-> f slurp (str "\n//# sourceURL=" uri))}))
+
+(defn- send-reload [logger build sessions namespaces]
+  (when (seq namespaces)
+    (let [mesg {:op :load :reload (map #(add-ns-src % build) namespaces)}]
+      (doseq [session (vals @sessions)]
+        (remote-call session mesg 10000)))
+    (log/report logger :cljs/reloaded namespaces))) 
+
 (defmethod ig/resume-key ::server
-  [_ {{:keys [compiler-env]} :build new-port :port, logger :logger}
+  [_ {{:keys [compiler-env] :as build} :build new-port :port, logger :logger}
    {:keys [port]}
    {:keys [sessions server tracker handler]}]
   (compile-main compiler-env)
   (let [new-handler (build-repl-handler compiler-env sessions)
         new-opts    {:port new-port :handler new-handler}
         old-opts    {:port port :handler handler}
-        tracker     (update-tracker tracker)] 
-    (when-some [reloaded (seq (::track/load tracker))]
-      (let [reload-mesg {:op :load :namespaces (::track/load tracker)}]
-        (doseq [session (vals @sessions)]
-           (remote-call session reload-mesg 10000)))
-      (log/report logger :cljs/reloaded reloaded)) 
+        tracker     (update-tracker tracker)]
+    (send-reload logger build sessions (::track/load tracker))
     {:sessions sessions
      :server   (ig/resume-key :duct.server.http/jetty new-opts old-opts server)
      :tracker  (dissoc tracker ::track/load ::track/unload)}))
