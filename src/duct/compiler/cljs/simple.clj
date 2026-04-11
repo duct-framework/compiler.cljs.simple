@@ -6,6 +6,8 @@
             [cljs.util :as util]
             [clojure.core.async :as a :refer [<! >! >!!]]
             [clojure.java.classpath :as cp]
+            [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.tools.namespace.dir :as dir]
             [clojure.tools.namespace.find :as find]
             [clojure.tools.namespace.track :as track]
@@ -13,14 +15,48 @@
             [duct.server.http.jetty]
             [integrant.core :as ig]
             [ring.websocket.async :as wsa]
-            [ring.websocket.keepalive :refer [wrap-websocket-keepalive]]))
+            [ring.websocket.keepalive :refer [wrap-websocket-keepalive]])
+  (:import [java.net URI]))
 
 (defn- compiler-env [opts]
   (ana/empty-state (-> opts (dissoc :foreign-libs) (clos/add-externs-sources))))
 
-(defmethod ig/init-key ::build [_ {:keys [src logger output-to] :as opts}]
+(defn list-build-files [{:keys [output-dir]}]
+  (let [root-uri (URI/create "goog/")]
+    (->> (str (slurp (io/file output-dir "goog" "deps.js"))
+              (slurp (io/file output-dir "cljs_deps.js")))
+         (re-seq #"(?m)^goog\.addDependency\(\"(.*?)\"")
+         (map (fn [[_ path]] (str (.resolve root-uri path)))))))
+ 
+(defn ns-eval-source [path {:keys [output-dir asset-path]}]
+  (let [uri    (str asset-path "/" path) 
+        target (apply io/file output-dir (str/split path #"/"))]
+    (-> target slurp (str "\n//# sourceURL=" uri))))
+
+(defn- eval-js-form [js]
+  (list 'js* "(0,eval)(~{})" js))
+
+(defn- init-forms [opts]
+  (let [load-js #(eval-js-form (ns-eval-source % opts))]
+    (into ['(set! js/CLOSURE_IMPORT_SCRIPT (fn [_ _]))
+           (list 'when-not (list 'exists? 'js/goog) (load-js "goog/base.js"))
+           (load-js "goog/deps.js")
+           (load-js "cljs_deps.js")
+           '(set! js/goog.provide js/goog.constructNamespace_)
+           '(set! js/goog.require js/goog.module.get)]
+          (map load-js)
+          (rest (list-build-files opts)))))
+ 
+(defn- create-init-script [env {:keys [output-to] :as opts}]
+  (spit output-to (build/compile env (init-forms opts))))
+  
+(defmethod ig/init-key ::build
+  [_ {:keys [src logger optimizations output-to] :as opts}]
   (let [env (compiler-env {})]
-    (build/build src (dissoc opts :src) env)
+    (if (= optimizations :none)
+      (do (build/build src (dissoc opts :src :output-to) env)
+          (create-init-script @env opts))
+      (build/build src (dissoc opts :src) env))
     (log/info logger ::build-complete {:output-to output-to})
     (assoc opts :compiler-env env)))
 

@@ -40,13 +40,8 @@
   (set! (.. element -style -opacity) "0")
   (js/setTimeout #(some-> (.-parentNode element) (.removeChild element)) 500))
 
-(defn- patch-goog! []
-  (set! js/goog.provide js/goog.constructNamespace_)
-  (set! js/goog.require js/goog.module.get))
-
 (defn- load-namespaces [namespaces]
   (let [notify (notify-element "Reloading...")]
-    (patch-goog!)
     (try (show-notify notify)
          (doseq [{ns-str "ns" src "src"} namespaces]
            (js* "(0,eval)(~{})" src)
