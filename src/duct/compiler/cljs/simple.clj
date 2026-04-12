@@ -6,7 +6,6 @@
             [cljs.util :as util]
             [clojure.core.async :as a :refer [<! >! >!!]]
             [clojure.java.classpath :as cp]
-            [clojure.tools.namespace.dependency :as dep]
             [clojure.tools.namespace.dir :as dir]
             [clojure.tools.namespace.find :as find]
             [clojure.tools.namespace.track :as track]
@@ -19,42 +18,37 @@
 (defn- compiler-env [opts]
   (ana/empty-state (-> opts (dissoc :foreign-libs) (clos/add-externs-sources))))
 
-(defn- depend-compiled [graph {:keys [ns requires]}]
-  (reduce #(dep/depend %1 (str ns) %2) graph requires))
+(defn provide-map [env]
+  (reduce (fn [m v] (reduce #(assoc %1 %2 v) m #p (:provides v)))
+          {} (vals (::clos/compiled-cljs env))))
 
-(defn ns-dep-graph [env]
-  (reduce depend-compiled (dep/graph) (vals (::clos/compiled-cljs env)))) 
+(defn namespaces-in-load-order [env namespaces]
+  (let [provides (provide-map env)]
+    (prn :provides-keys (keys provides))
+    (prn :nil-provides (remove val provides))
+    (letfn [(step
+              ([nss] nss)
+              ([nss {:keys [requires] :as compile-data}]
+               #_(when-some [inv (seq (remove provides requires))]
+                   (prn :invalid-requires inv))
+               (-> (transduce (map provides) step nss requires)
+                   (conj compile-data))))]
+      (distinct (transduce (map (comp provides str)) step [] namespaces)))))
 
-(defn ordered-ns-deps [graph ns-str]
-  (->> (dep/topo-sort graph)
-       (filter #(or (= ns-str %) (dep/depends? graph ns-str %)))))
-
-(defn init-namespaces [graph namespaces]
-  (reduce (fn [nss ns-sym]
-            (->> (ordered-ns-deps graph (str ns-sym))
-                 (remove (set nss))
-                 (into nss)))
-          [] namespaces))
-
-(defn ns-compile-map [env]
-  (group-by (comp str :ns) (vals (::clos/compiled-cljs env))))
-
-(defn ns-eval-source [asset-path {:keys [ns out-file]}]
+(defn ns-eval-source [asset-path {:keys [ns out-file] :as opts}]
+  (prn :opts opts)
   (let [uri (str asset-path "/" (util/ns->relpath ns :js))]
-    (prn :ns ns :out-file out-file)
     (-> out-file slurp (str "\n//# sourceURL=" uri))))
 
 (defn- eval-js-form [js]
   (list 'js* "(0,eval)(~{})" js))
 
 (defn- init-forms [env {:keys [asset-path main preloads]}]
-  (let [namespaces  (conj (vec preloads) main)
-        compile-map (ns-compile-map env)]
-    (prn (compile-map "goog.string.StringBuffer"))
+  (let [namespaces (conj (vec preloads) main)]
     (into ['(set! js/goog.provide js/goog.constructNamespace_)
            '(set! js/goog.require js/goog.module.get)]
-          (map #(eval-js-form (ns-eval-source asset-path #p (compile-map #p %))))
-          (init-namespaces (ns-dep-graph env) namespaces)))) 
+          (map #(eval-js-form (ns-eval-source asset-path %)))
+          (namespaces-in-load-order env namespaces)))) 
  
 (defn- create-init-script [env {:keys [output-to] :as opts}]
   (spit output-to (init-forms env opts)))
