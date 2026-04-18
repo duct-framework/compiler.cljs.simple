@@ -6,6 +6,7 @@
             [cljs.util :as util]
             [clojure.core.async :as a :refer [<! >! >!!]]
             [clojure.java.classpath :as cp]
+            [clojure.java.io :as io]
             [clojure.tools.namespace.dir :as dir]
             [clojure.tools.namespace.find :as find]
             [clojure.tools.namespace.track :as track]
@@ -18,22 +19,31 @@
 (defn- compiler-env [opts]
   (ana/empty-state (-> opts (dissoc :foreign-libs) (clos/add-externs-sources))))
 
-(defn provide-map [env]
-  (reduce (fn [m v] (reduce #(assoc %1 %2 v) m #p (:provides v)))
-          {} (vals (::clos/compiled-cljs env))))
+(defn assoc-dependency
+  [{:keys [output-dir]} deps {:keys [provides requires out-file file]}]
+  (let [file (if file (io/file output-dir file) (io/file out-file))]
+    (-> deps
+        (update :provides (fn [v] (reduce #(assoc %1 %2 file) v provides)))
+        (update :requires assoc file requires))))
 
-(defn namespaces-in-load-order [env namespaces]
-  (let [provides (provide-map env)]
-    (prn :provides-keys (keys provides))
-    (prn :nil-provides (remove val provides))
+(defn dependency-map [env opts]
+  (->> (vals (::clos/compiled-cljs env))
+       (concat (vals (:js-dependency-index env)))
+       (concat (vals (:node-module-index env)))
+       (reduce #(assoc-dependency opts %1 %2) {:provides {} :requires {}})))
+
+(defn namespace-map [env]
+  (->> (vals (::clos/compiled-cljs env))
+       (reduce #(assoc %1 (:ns %2) (:out-file %2)) {})))
+
+(defn namespaces-in-load-order [env namespaces opts]
+  (let [{:keys [provides requires]} (dependency-map env opts)]
     (letfn [(step
-              ([nss] nss)
-              ([nss {:keys [requires] :as compile-data}]
-               #_(when-some [inv (seq (remove provides requires))]
-                   (prn :invalid-requires inv))
-               (-> (transduce (map provides) step nss requires)
-                   (conj compile-data))))]
-      (distinct (transduce (map (comp provides str)) step [] namespaces)))))
+              ([files] files)
+              ([files file]
+               (-> (transduce (map provides) step files (requires file))
+                   (conj file))))]
+      (distinct (transduce (map (namespace-map env)) step [] namespaces)))))
 
 (defn ns-eval-source [asset-path {:keys [ns out-file] :as opts}]
   (prn :opts opts)
@@ -58,7 +68,7 @@
   (let [env (compiler-env {})]
     (if (= optimizations :none)
       (do (build/build src (dissoc opts :src :output-to) env)
-          (create-init-script @env opts))
+          #_(create-init-script @env opts))
       (build/build src (dissoc opts :src) env))
     (log/info logger ::build-complete {:output-to output-to})
     (assoc opts :compiler-env env)))
