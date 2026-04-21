@@ -7,6 +7,7 @@
             [clojure.core.async :as a :refer [<! >! >!!]]
             [clojure.java.classpath :as cp]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.tools.namespace.dir :as dir]
             [clojure.tools.namespace.find :as find]
             [clojure.tools.namespace.track :as track]
@@ -16,12 +17,15 @@
             [ring.websocket.async :as wsa]
             [ring.websocket.keepalive :refer [wrap-websocket-keepalive]]))
 
+(defn- ->Path ^java.nio.file.Path [path & paths]
+  (java.nio.file.Path/of path (into-array String paths)))
+
 (defn- compiler-env [opts]
   (ana/empty-state (-> opts (dissoc :foreign-libs) (clos/add-externs-sources))))
 
 (defn assoc-dependency
   [{:keys [output-dir]} deps {:keys [provides requires out-file file]}]
-  (let [file (if file (io/file output-dir file) (io/file out-file))]
+  (let [file (if file (str (io/file output-dir file)) out-file)]
     (-> deps
         (update :provides (fn [v] (reduce #(assoc %1 %2 file) v provides)))
         (update :requires assoc file requires))))
@@ -29,46 +33,57 @@
 (defn dependency-map [env opts]
   (->> (vals (::clos/compiled-cljs env))
        (concat (vals (:js-dependency-index env)))
-       (concat (vals (:node-module-index env)))
        (reduce #(assoc-dependency opts %1 %2) {:provides {} :requires {}})))
 
 (defn namespace-map [env]
   (->> (vals (::clos/compiled-cljs env))
        (reduce #(assoc %1 (:ns %2) (:out-file %2)) {})))
 
+(defn find-dependency-file [dep {:keys [output-dir]}]
+  (let [file-parts (str/split dep #"\.")]
+    (->> (conj (pop file-parts) (str (peek file-parts) ".js"))
+         (apply io/file output-dir)
+         str)))
+
 (defn namespaces-in-load-order [env namespaces opts]
   (let [{:keys [provides requires]} (dependency-map env opts)]
-    (letfn [(step
+    (letfn [(lookup [dep]
+              (provides dep (find-dependency-file dep opts)))
+            (step
               ([files] files)
               ([files file]
-               (-> (transduce (map provides) step files (requires file))
+               (-> (transduce (map lookup) step files (requires file))
                    (conj file))))]
       (distinct (transduce (map (namespace-map env)) step [] namespaces)))))
 
-(defn ns-eval-source [asset-path {:keys [ns out-file] :as opts}]
-  (prn :opts opts)
-  (let [uri (str asset-path "/" (util/ns->relpath ns :js))]
-    (-> out-file slurp (str "\n//# sourceURL=" uri))))
+(defn find-asset-path [target-path {:keys [asset-path output-dir]}]
+  (->> (.relativize (->Path output-dir) (->Path target-path))
+       (str/join "/")
+       (str asset-path "/")))
+
+(defn ns-eval-source [target-path opts]
+  (let [uri (find-asset-path target-path opts)]
+    (-> target-path slurp (str "\n//# sourceURL=" uri))))
 
 (defn- eval-js-form [js]
   (list 'js* "(0,eval)(~{})" js))
 
-(defn- init-forms [env {:keys [asset-path main preloads]}]
+(defn- init-forms [env {:keys [main preloads] :as opts}]
   (let [namespaces (conj (vec preloads) main)]
     (into ['(set! js/goog.provide js/goog.constructNamespace_)
            '(set! js/goog.require js/goog.module.get)]
-          (map #(eval-js-form (ns-eval-source asset-path %)))
-          (namespaces-in-load-order env namespaces)))) 
+          (map #(eval-js-form (ns-eval-source % opts)))
+          (namespaces-in-load-order env namespaces opts)))) 
  
 (defn- create-init-script [env {:keys [output-to] :as opts}]
-  (spit output-to (init-forms env opts)))
+  (spit output-to (build/compile env (init-forms env opts))))
   
 (defmethod ig/init-key ::build
   [_ {:keys [src logger optimizations output-to] :as opts}]
   (let [env (compiler-env {})]
     (if (= optimizations :none)
       (do (build/build src (dissoc opts :src :output-to) env)
-          #_(create-init-script @env opts))
+          (create-init-script @env opts))
       (build/build src (dissoc opts :src) env))
     (log/info logger ::build-complete {:output-to output-to})
     (assoc opts :compiler-env env)))
