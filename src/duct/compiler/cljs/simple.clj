@@ -45,7 +45,7 @@
          (apply io/file output-dir)
          str)))
 
-(defn namespaces-in-load-order [env namespaces opts]
+(defn files-in-load-order [env namespaces opts]
   (let [{:keys [provides requires]} (dependency-map env opts)]
     (letfn [(lookup [dep]
               (provides dep (find-dependency-file dep opts)))
@@ -62,18 +62,24 @@
        (str asset-path "/")))
 
 (defn ns-eval-source [target-path opts]
+  (prn target-path)
   (let [uri (find-asset-path target-path opts)]
     (-> target-path slurp (str "\n//# sourceURL=" uri))))
 
 (defn- eval-js-form [js]
   (list 'js* "(0,eval)(~{})" js))
 
-(defn- init-forms [env {:keys [main preloads] :as opts}]
-  (let [namespaces (conj (vec preloads) main)]
-    (into ['(set! js/goog.provide js/goog.constructNamespace_)
+(defn- init-forms [env {:keys [main preloads output-dir] :as opts}]
+  (let [namespaces (conj (vec preloads) main)
+        load-js    #(eval-js-form (ns-eval-source (str %) opts))]
+    (into [(list 'when-not (list 'exists? 'js/goog)
+              (load-js (io/file output-dir "goog" "base.js")))
+           (load-js (io/file output-dir "goog" "deps.js"))
+           (load-js (io/file output-dir "cljs_deps.js"))
+           '(set! js/goog.provide js/goog.constructNamespace_)
            '(set! js/goog.require js/goog.module.get)]
-          (map #(eval-js-form (ns-eval-source % opts)))
-          (namespaces-in-load-order env namespaces opts)))) 
+          (map load-js)
+          (files-in-load-order env namespaces opts)))) 
  
 (defn- create-init-script [env {:keys [output-to] :as opts}]
   (spit output-to (build/compile env (init-forms env opts))))
