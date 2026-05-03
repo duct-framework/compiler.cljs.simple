@@ -37,8 +37,10 @@
 
 (defn- init-script [opts]
   (let [load-js #(eval-js-form (ns-eval-source % opts))]
-    (str "CLOSURE_IMPORT_SCRIPT = function() {};\n"
+    (str "window.CLOSURE_IMPORT_SCRIPT = function() {};\n"
          (load-js "goog/base.js") 
+         "goog.provide = goog.constructNamespace_;\n"
+         "goog.require = goog.module.get;\n"
          (load-js "goog/deps.js")
          (load-js "cljs_deps.js")
          (->> (list-build-files opts) rest (map load-js) (apply str)))))
