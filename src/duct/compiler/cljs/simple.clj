@@ -15,14 +15,13 @@
             [duct.server.http.jetty]
             [integrant.core :as ig]
             [ring.websocket.async :as wsa]
-            [ring.websocket.keepalive :refer [wrap-websocket-keepalive]])
-  (:import [java.net URI]))
+            [ring.websocket.keepalive :refer [wrap-websocket-keepalive]]))
 
 (defn- compiler-env [opts]
   (ana/empty-state (-> opts (dissoc :foreign-libs) (clos/add-externs-sources))))
 
 (defn list-build-files [{:keys [output-dir]}]
-  (let [root-uri (URI/create "goog/")]
+  (let [root-uri (java.net.URI/create "goog/")]
     (->> (str (slurp (io/file output-dir "goog" "deps.js"))
               (slurp (io/file output-dir "cljs_deps.js")))
          (re-seq #"(?m)^goog\.addDependency\(\"(.*?)\"")
@@ -39,11 +38,9 @@
 (defn- init-forms [opts]
   (let [load-js #(eval-js-form (ns-eval-source % opts))]
     (into ['(set! js/CLOSURE_IMPORT_SCRIPT (fn [_ _]))
-           (list 'when-not (list 'exists? 'js/goog) (load-js "goog/base.js"))
+           (load-js "goog/base.js")
            (load-js "goog/deps.js")
-           (load-js "cljs_deps.js")
-           '(set! js/goog.provide js/goog.constructNamespace_)
-           '(set! js/goog.require js/goog.module.get)]
+           (load-js "cljs_deps.js")]
           (map load-js)
           (rest (list-build-files opts)))))
  
