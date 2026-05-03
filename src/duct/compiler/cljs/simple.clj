@@ -48,7 +48,7 @@
 (defmethod ig/init-key ::build
   [_ {:keys [src logger optimizations output-to] :as opts}]
   (let [env (compiler-env {})]
-    (if (= optimizations :none)
+    (if (and output-to (= optimizations :none))
       (do (build/build src (dissoc opts :src :output-to) env)
           (spit output-to (init-script opts)))
       (build/build src (dissoc opts :src) env))
