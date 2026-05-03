@@ -33,26 +33,22 @@
     (-> target slurp (str "\n//# sourceURL=" uri))))
 
 (defn- eval-js-form [js]
-  (list 'js* "(0,eval)(~{})" js))
+  (str "eval(" (json/generate-string js) ");\n"))
 
-(defn- init-forms [opts]
+(defn- init-script [opts]
   (let [load-js #(eval-js-form (ns-eval-source % opts))]
-    (into ['(set! js/CLOSURE_IMPORT_SCRIPT (fn [_ _]))
-           (load-js "goog/base.js")
-           (load-js "goog/deps.js")
-           (load-js "cljs_deps.js")]
-          (map load-js)
-          (rest (list-build-files opts)))))
+    (str "CLOSURE_IMPORT_SCRIPT = function() {};\n"
+         (load-js "goog/base.js") 
+         (load-js "goog/deps.js")
+         (load-js "cljs_deps.js")
+         (->> (list-build-files opts) rest (map load-js) (apply str)))))
  
-(defn- create-init-script [env {:keys [output-to] :as opts}]
-  (spit output-to (build/compile env (init-forms opts))))
-  
 (defmethod ig/init-key ::build
   [_ {:keys [src logger optimizations output-to] :as opts}]
   (let [env (compiler-env {})]
     (if (= optimizations :none)
       (do (build/build src (dissoc opts :src :output-to) env)
-          (create-init-script @env opts))
+          (spit output-to (init-script opts)))
       (build/build src (dissoc opts :src) env))
     (log/info logger ::build-complete {:output-to output-to})
     (assoc opts :compiler-env env)))
