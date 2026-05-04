@@ -34,19 +34,26 @@
           wsout (a/chan 128)
           ws    (ws/build-websocket
                  "ws://localhost:9001/"
-                 {:on-text (fn [_ text _] (>!! wsout text))})
-          in    (-> sys ::simple/server :sessions deref first val :in)]
+                 {:on-text (fn [ws text _] (ws/send ws text) (>!! wsout text))})
+          sess  (-> sys ::simple/server :sessions deref vals first)]
       (try
-        (>!! in '(+ 1 1))
-        (is (= {"eval" "(function (){\nreturn ((1) + (1));\n}).call(null);\n"}
+        (is (some? sess))
+        (simple/eval-cljs sess '(+ 1 1))
+        (is (= {"id" 1
+                "op" "eval"
+                "js" "(function (){\nreturn ((1) + (1));\n}).call(null);\n"}
                (json/parse-string (<!! wsout))))
-        (>!! in '(require '[clojure.string :as s]))
-        (is (= {"eval" "goog.require('clojure.string');\n"}
+        (simple/eval-cljs sess '(require '[clojure.string :as s]))
+        (is (= {"id" 2
+                "op" "eval"
+                "js" "goog.require('clojure.string');\n"}
                (json/parse-string (<!! wsout))))
-        (>!! in '(s/trim " foo "))
-        (is (= {"eval" (str "(function (){\nreturn "
-                            "clojure.string.trim.call(null,\" foo \");\n"
-                            "}).call(null);\n")}
+        (simple/eval-cljs sess '(s/trim " foo "))
+        (is (= {"id" 3
+                "op" "eval"
+                "js" (str "(function (){\nreturn "
+                          "clojure.string.trim.call(null,\" foo \");\n"
+                          "}).call(null);\n")}
                (json/parse-string (<!! wsout))))
         (finally
           (ws/close ws)
