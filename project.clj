@@ -6,7 +6,7 @@
                  [org.clojure/core.async "1.9.865"]
                  [org.clojure/java.classpath "1.1.1"]
                  [org.clojure/tools.namespace "1.5.1"]
-                 [cheshire "5.13.0"]
+                 [cheshire "6.2.0"]
                  [haslett "0.2.0"]
                  [integrant "1.0.1"]
                  [org.duct-framework/logger "0.4.0"]
