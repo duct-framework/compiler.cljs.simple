@@ -1,4 +1,4 @@
-# Duct Simple ClojureScript Compiler
+# Duct Simple ClojureScript Compiler [![Build Status](https://github.com/duct-framework/compiler.cljs.simple/actions/workflows/test.yml/badge.svg)](https://github.com/duct-framework/compiler.cljs.simple/actions/workflows/test.yml)
 
 [Integrant][] methods for compiling ClojureScript using functions from
 `cljs.build.api`. Designed for the [Duct][] framework, but can be used
