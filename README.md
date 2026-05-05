@@ -16,11 +16,11 @@ is more efficient than the default `document.write` method.
 
 Add the following dependency to your deps.edn file:
 
-    org.duct-framework/compiler.cljs.simple {:mvn/version "0.1.0-SNAPSHOT"}
+    org.duct-framework/compiler.cljs.simple {:mvn/version "0.1.0"}
 
 Or to your Leiningen project file:
 
-    [org.duct-framework/compiler.cljs.simple "0.1.0-SNAPSHOT"]
+    [org.duct-framework/compiler.cljs.simple "0.1.0"]
 
 ## Usage
 
